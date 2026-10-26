@@ -1,0 +1,22 @@
+{
+  "appId": "de.stempeluhr.app",
+  "appName": "Stempeluhr",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#000000",
+    "preferredContentMode": "mobile",
+    "allowsLinkPreview": false,
+    "scrollEnabled": false
+  },
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK",
+      "backgroundColor": "#00000000"
+    },
+    "Keyboard": {
+      "resize": "none"
+    }
+  }
+}
