@@ -23,7 +23,7 @@ Zeiterfassungs-App für iPhone und Web. Einfach Arbeitszeiten tracken, Überstun
 
 ### Als Web-App (empfohlen)
 
-1. [stempeluhr-app.vercel.app](https://stempeluhr-app.vercel.app) im Browser öffnen
+1.https://stempeluhr-three.vercel.app/ im Browser öffnen
 2. **iPhone:** Safari → Teilen → "Zum Home-Bildschirm"
 3. **Android:** Chrome → "Zum Startbildschirm hinzufügen"
 
