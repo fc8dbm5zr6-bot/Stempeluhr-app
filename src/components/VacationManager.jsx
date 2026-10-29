@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { db } from '../db'
 import { useVacations, useSettings } from '../hooks/useTimeEntries'
 
 const TYPES = ['Urlaub', 'Freizeitausgleich', 'Krankheit', 'Feiertag']
 
 export default function VacationManager({ onClose }) {
+  const vSwipe = useRef(null)
   const [year, setYear] = useState(new Date().getFullYear())
   const [showForm, setShowForm] = useState(false)
   const [editVac, setEditVac] = useState(null)
@@ -48,7 +49,10 @@ export default function VacationManager({ onClose }) {
   })
 
   return (
-    <div className="page">
+    <div className="page" onTouchStart={e => { vSwipe.current = e.touches[0].clientX }} onTouchEnd={e => {
+      if (vSwipe.current !== null && e.changedTouches[0].clientX - vSwipe.current > 100) onClose()
+      vSwipe.current = null
+    }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text)', fontSize: 24, cursor: 'pointer' }}>←</button>

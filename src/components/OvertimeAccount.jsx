@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { db } from '../db'
 import { useSettings } from '../hooks/useTimeEntries'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -71,8 +71,16 @@ export default function OvertimeAccount({ onClose }) {
     setShowAddForm(false)
   }
 
+  const touchStart = useRef(null)
+  const handleTouchStart = (e) => { touchStart.current = e.touches[0].clientX }
+  const handleTouchEnd = (e) => {
+    if (touchStart.current === null) return
+    if (e.changedTouches[0].clientX - touchStart.current > 100) onClose()
+    touchStart.current = null
+  }
+
   return (
-    <div className="page">
+    <div className="page" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text)', fontSize: 24, cursor: 'pointer' }}>←</button>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Überstundenkonto</h1>
