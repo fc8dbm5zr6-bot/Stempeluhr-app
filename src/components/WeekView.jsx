@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useSettings, useWeekEntries, useVacations } from '../hooks/useTimeEntries'
 import {
   getWeekNumber, formatDuration, calculateDailyTarget, getDayEntries,
@@ -40,11 +40,21 @@ export default function WeekView({ onSelectDay }) {
   const dailyTarget = settings ? calculateDailyTarget(settings.weeklyHours, settings.workDays) : 8
   const workDays = settings?.workDays || [1, 2, 3, 4, 5]
 
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(iv)
+  }, [])
+
+  const todayStr = toDateStr(new Date())
+
   const days = weekDates.map(date => {
     const dateStr = toDateStr(date)
     const dayEntries = getDayEntries(entries || [], dateStr)
-    const workedWithMultiplier = calculateWorkedMinutes(dayEntries)
-    const rawWorked = calculateRawWorkedMinutes(dayEntries)
+    const openEntry = dateStr === todayStr ? dayEntries.find(e => !e.endTime && e.type === 'work') : null
+    const liveExtra = openEntry ? (now - new Date(openEntry.startTime).getTime()) / 60000 : 0
+    const workedWithMultiplier = calculateWorkedMinutes(dayEntries) + liveExtra
+    const rawWorked = calculateRawWorkedMinutes(dayEntries) + liveExtra
     const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay()
     const isWork = workDays.includes(dayOfWeek)
     const isVac = isVacationDay(date, vacations || [])

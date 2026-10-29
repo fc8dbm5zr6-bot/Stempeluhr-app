@@ -1,8 +1,17 @@
 import Papa from 'papaparse'
 import { formatTime } from './calculations'
 
-function downloadCSV(csvString, filename) {
+async function downloadCSV(csvString, filename) {
   const blob = new Blob(['﻿' + csvString], { type: 'text/csv;charset=utf-8;' })
+  const file = new File([blob], filename, { type: 'text/csv' })
+
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: filename })
+      return
+    } catch {}
+  }
+
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
