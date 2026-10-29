@@ -1,22 +1,28 @@
 import { useState, useRef } from 'react'
 import { db } from '../db'
+import { useSettings } from '../hooks/useTimeEntries'
 
-const MULTIPLIERS = [
-  { value: 1, label: '1x', desc: 'Normal' },
-  { value: 1.25, label: '1,25x', desc: 'Zuschlag 25%' },
-  { value: 1.5, label: '1,5x', desc: 'Wochenende' },
-  { value: 2, label: '2x', desc: 'Feiertag/Nacht' },
-]
+function getMultipliers(settings) {
+  const vals = settings?.multipliers || [1, 1.25, 1.5, 2]
+  return vals.map(v => ({
+    value: v,
+    label: v === 1 ? '1x' : `${String(v).replace('.', ',')}x`,
+    desc: v === 1 ? 'Normal' : `+${Math.round((v - 1) * 100)}%`,
+  }))
+}
 
 export default function EditEntryModal({ entry, date, onClose, onDelete }) {
+  const settings = useSettings()
+  const MULTIPLIERS = getMultipliers(settings)
+  const isRunning = !entry.endTime
   const startDate = new Date(entry.startTime)
-  const endDate = new Date(entry.endTime)
+  const endDate = entry.endTime ? new Date(entry.endTime) : null
 
   const [startStr, setStartStr] = useState(
     `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`
   )
   const [endStr, setEndStr] = useState(
-    `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`
+    endDate ? `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}` : ''
   )
   const [type, setType] = useState(entry.type)
   const [comment, setComment] = useState(entry.comment || '')
@@ -52,27 +58,33 @@ export default function EditEntryModal({ entry, date, onClose, onDelete }) {
 
   async function handleSave() {
     const [sh, sm] = startStr.split(':').map(Number)
-    const [eh, em] = endStr.split(':').map(Number)
-    const newStart = new Date(date + 'T00:00:00')
-    newStart.setHours(sh, sm, 0, 0)
-    const newEnd = new Date(date + 'T00:00:00')
-    newEnd.setHours(eh, em, 0, 0)
+    const [y, mo, d] = date.split('-').map(Number)
+    const newStart = new Date(y, mo - 1, d, sh, sm, 0, 0)
 
-    await db.timeEntries.update(entry.id, {
+    const updates = {
       startTime: newStart.toISOString(),
-      endTime: newEnd.toISOString(),
       type,
       comment,
       multiplier,
-    })
+    }
+
+    if (!isRunning && endStr) {
+      const [eh, em] = endStr.split(':').map(Number)
+      const newEnd = new Date(y, mo - 1, d, eh, em, 0, 0)
+      if (newEnd <= newStart) newEnd.setDate(newEnd.getDate() + 1)
+      updates.endTime = newEnd.toISOString()
+    }
+
+    await db.timeEntries.update(entry.id, updates)
     onClose()
   }
 
   const duration = (() => {
+    if (isRunning || !endStr) return 'läuft...'
     const [sh, sm] = startStr.split(':').map(Number)
     const [eh, em] = endStr.split(':').map(Number)
-    const mins = (eh * 60 + em) - (sh * 60 + sm)
-    if (mins <= 0) return '0Sek.'
+    let mins = (eh * 60 + em) - (sh * 60 + sm)
+    if (mins < 0) mins += 1440
     const h = Math.floor(mins / 60)
     const m = mins % 60
     if (h > 0 && m > 0) return `${h}Std. ${m}Min.`
@@ -101,13 +113,20 @@ export default function EditEntryModal({ entry, date, onClose, onDelete }) {
         {/* Zeiten */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 16, color: 'var(--text-secondary)' }}>Zeiten</span>
-            <span style={{ fontSize: 16, color: 'var(--text-secondary)' }}>{duration}</span>
+            <span style={{ fontSize: 16, color: 'var(--text-secondary)' }}>{isRunning ? 'Startzeit' : 'Zeiten'}</span>
+            <span style={{ fontSize: 16, color: isRunning ? 'var(--green)' : 'var(--text-secondary)' }}>{duration}</span>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <input type="time" value={startStr} onChange={e => setStartStr(e.target.value)} style={timeInputStyle} />
-            <input type="time" value={endStr} onChange={e => setEndStr(e.target.value)} style={timeInputStyle} />
+            {!isRunning && (
+              <input type="time" value={endStr} onChange={e => setEndStr(e.target.value)} style={timeInputStyle} />
+            )}
           </div>
+          {isRunning && (
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8 }}>
+              Endzeit wird durch Pause/Stopp gesetzt
+            </div>
+          )}
         </div>
 
         {/* Type toggle */}
@@ -118,7 +137,7 @@ export default function EditEntryModal({ entry, date, onClose, onDelete }) {
               flex: 1, padding: '12px 0', border: 'none', cursor: 'pointer',
               background: type === 'work' ? 'var(--bg-card-hover)' : 'transparent',
               color: 'var(--text)', fontSize: 14, fontWeight: type === 'work' ? 600 : 400,
-            }}>Zeiteintrag</button>
+            }}>Arbeitszeit</button>
             <button onClick={() => setType('pause')} style={{
               flex: 1, padding: '12px 0', border: 'none', cursor: 'pointer',
               background: type === 'pause' ? 'var(--bg-card-hover)' : 'transparent',

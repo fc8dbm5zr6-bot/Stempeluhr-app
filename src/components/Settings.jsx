@@ -15,6 +15,8 @@ export default function Settings() {
   const [showVacations, setShowVacations] = useState(false)
   const [showOvertime, setShowOvertime] = useState(false)
   const [editPlan, setEditPlan] = useState(false)
+  const [showTheme, setShowTheme] = useState(false)
+  const [themeMode, setThemeMode] = useState(() => { try { return localStorage.getItem('themeMode') || 'system' } catch { return 'system' } })
 
   const allEntries = useLiveQuery(() => db.timeEntries.toArray()) || []
   const allVacations = useLiveQuery(() => db.vacations.toArray()) || []
@@ -82,7 +84,7 @@ export default function Settings() {
         </button>
       </div>
 
-      {editPlan && (
+      {editPlan && (<>
         <div style={{ background: 'var(--card)', borderRadius: 12, padding: 16, marginBottom: 24 }}>
           {/* Plan name */}
           <label style={labelStyle}>Name</label>
@@ -174,7 +176,58 @@ export default function Settings() {
             })}
           </div>
         </div>
-      )}
+
+        {/* Zuschläge */}
+        <div style={{ background: 'var(--card)', borderRadius: 12, padding: 16, marginTop: 12 }}>
+          <label style={labelStyle}>Zeitzuschläge (max. 4)</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(settings.multipliers || [1, 1.25, 1.5, 2]).map((m, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="number"
+                  value={m}
+                  step="0.01"
+                  min="0.5"
+                  max="5"
+                  onChange={e => {
+                    const val = parseFloat(e.target.value)
+                    if (!isNaN(val) && val > 0) {
+                      const newMults = [...(settings.multipliers || [1, 1.25, 1.5, 2])]
+                      newMults[i] = val
+                      updateSetting('multipliers', newMults)
+                    }
+                  }}
+                  style={{ ...inputStyle, width: 80, textAlign: 'center', flex: 'none' }}
+                />
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {m === 1 ? 'Normal' : `+${Math.round((m - 1) * 100)}% Zuschlag`}
+                </span>
+                {(settings.multipliers || []).length > 1 && (
+                  <button onClick={() => {
+                    const newMults = [...(settings.multipliers || [1, 1.25, 1.5, 2])]
+                    newMults.splice(i, 1)
+                    updateSetting('multipliers', newMults)
+                  }} style={{
+                    width: 32, height: 32, borderRadius: 8, border: 'none',
+                    background: 'transparent', color: 'var(--red)', fontSize: 18, cursor: 'pointer',
+                  }}>✕</button>
+                )}
+              </div>
+            ))}
+          </div>
+          {(settings.multipliers || [1, 1.25, 1.5, 2]).length < 4 && (
+            <button onClick={() => {
+              const mults = [...(settings.multipliers || [1, 1.25, 1.5, 2])]
+              mults.push(1)
+              updateSetting('multipliers', mults)
+            }} style={{
+              width: '100%', marginTop: 8, padding: '8px 0', borderRadius: 8,
+              border: '1px dashed var(--divider)', background: 'transparent',
+              color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer',
+            }}>+ Zuschlag hinzufügen</button>
+          )}
+        </div>
+      </>)}
 
       {/* Daten */}
       <SectionHeader>Daten</SectionHeader>
@@ -188,6 +241,41 @@ export default function Settings() {
           <span>📥 Daten aus CSV importieren</span>
           <span style={{ color: 'var(--text-secondary)' }}>›</span>
         </button>
+      </div>
+
+      {/* Darstellung */}
+      <SectionHeader>Darstellung</SectionHeader>
+      <div style={{ background: 'var(--card)', borderRadius: 12, marginBottom: 24 }}>
+        <button onClick={() => setShowTheme(!showTheme)} style={menuItemStyle}>
+          <span>🌗 Erscheinungsbild</span>
+          <span style={{ color: 'var(--text-secondary)' }}>{showTheme ? '▼' : '›'}</span>
+        </button>
+        {showTheme && (
+          <div style={{ padding: '0 16px 12px' }}>
+            {[
+              { value: 'system', label: 'System (automatisch)' },
+              { value: 'dark', label: 'Dunkel' },
+              { value: 'light', label: 'Hell' },
+            ].map(opt => (
+              <button key={opt.value} onClick={() => {
+                setThemeMode(opt.value)
+                try { localStorage.setItem('themeMode', opt.value) } catch {}
+                const root = document.documentElement
+                if (opt.value === 'dark') root.setAttribute('data-theme', 'dark')
+                else if (opt.value === 'light') root.setAttribute('data-theme', 'light')
+                else root.removeAttribute('data-theme')
+              }} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                width: '100%', padding: '12px 0', background: 'none', border: 'none',
+                borderBottom: opt.value !== 'light' ? '1px solid var(--divider)' : 'none',
+                color: 'var(--text)', fontSize: 15, cursor: 'pointer', textAlign: 'left',
+              }}>
+                <span>{opt.label}</span>
+                {themeMode === opt.value && <span style={{ color: 'var(--blue)', fontSize: 18 }}>✓</span>}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Zeit und Ort */}
