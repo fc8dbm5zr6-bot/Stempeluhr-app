@@ -2,7 +2,7 @@
 
 Zeiterfassungs-App für iPhone und Web. Einfach Arbeitszeiten tracken, Überstunden verwalten und Urlaub planen — komplett offline, ohne Account, ohne Cloud.
 
-**Live-App:** https://stempeluhr-three.vercel.app/
+**Live-App:** https://stempeluhr-app.vercel.app
 
 ## Features
 
@@ -23,7 +23,7 @@ Zeiterfassungs-App für iPhone und Web. Einfach Arbeitszeiten tracken, Überstun
 
 ### Als Web-App (empfohlen)
 
-1.https://stempeluhr-three.vercel.app/ im Browser öffnen
+1.https://stempeluhr-app.vercel.app im Browser öffnen
 2. **iPhone:** Safari → Teilen → "Zum Home-Bildschirm"
 3. **Android:** Chrome → "Zum Startbildschirm hinzufügen"
 
