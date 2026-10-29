@@ -107,7 +107,8 @@ export default function DayDetail({ date, onClose }) {
   }
 
   return (
-    <div className="page-fullscreen" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+    <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 16px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
           <PercentRing percent={percent} />
@@ -264,13 +265,16 @@ export default function DayDetail({ date, onClose }) {
           })}
         </div>
 
-        {/* Bottom action buttons */}
-        <div style={{
-          display: 'flex', justifyContent: 'center', gap: 16, marginTop: 24,
-        }}>
-          <button onClick={onClose} style={circleBtn}>✕</button>
-          <button onClick={addManualEntry} style={{ ...circleBtn, background: 'var(--blue)' }}>+</button>
-        </div>
+      </div>{/* end scroll area */}
+
+      {/* Action buttons - fixed between content and nav */}
+      <div style={{
+        display: 'flex', justifyContent: 'center', gap: 16,
+        padding: '10px 0', flexShrink: 0,
+      }}>
+        <button onClick={onClose} style={circleBtn}>✕</button>
+        <button onClick={addManualEntry} style={{ ...circleBtn, background: 'var(--blue)' }}>+</button>
+      </div>
 
       {editEntry && (
         <EditEntryModal

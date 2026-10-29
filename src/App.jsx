@@ -29,6 +29,13 @@ export default function App() {
     }
   }, [])
   const [showQuickAbsence, setShowQuickAbsence] = useState(false)
+  const [tabResetKey, setTabResetKey] = useState(0)
+
+  function handleTabChange(tab) {
+    if (tab === activeTab) setTabResetKey(k => k + 1)
+    setSelectedDate(null)
+    setActiveTab(tab)
+  }
 
   const renderTab = () => {
     switch (activeTab) {
@@ -39,9 +46,9 @@ export default function App() {
           onAddAbsence={() => setShowQuickAbsence(true)}
         />
       case 'woche':
-        return <WeekView onSelectDay={(d) => setSelectedDate(d)} />
+        return <WeekView key={tabResetKey} onSelectDay={(d) => setSelectedDate(d)} />
       case 'monat':
-        return <MonthView />
+        return <MonthView key={tabResetKey} />
       case 'urlaub':
         return <VacationManager onClose={() => setActiveTab('start')} />
 
@@ -55,11 +62,12 @@ export default function App() {
   return (
     <>
       <div className="app-container">
-        {renderTab()}
+        {selectedDate ? (
+          <DayDetail date={selectedDate} onClose={() => setSelectedDate(null)} />
+        ) : (
+          renderTab()
+        )}
       </div>
-      {selectedDate && (
-        <DayDetail date={selectedDate} onClose={() => setSelectedDate(null)} />
-      )}
       {showVacations && (
         <div className="page-fullscreen" style={{ zIndex: 250 }}>
           <VacationManager onClose={() => setShowVacations(false)} />
@@ -111,7 +119,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <BottomNav active={activeTab} onChange={setActiveTab} />
+      <BottomNav active={activeTab} onChange={handleTabChange} />
     </>
   )
 }
