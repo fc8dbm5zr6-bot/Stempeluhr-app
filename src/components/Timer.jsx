@@ -16,10 +16,13 @@ function formatElapsed(totalSeconds) {
   return `${pad(h)}:${pad(m)}:${pad(s)}`
 }
 
+import EditEntryModal from './EditEntryModal'
+
 export default function Timer({ onShowDay, onShowVacations, onAddAbsence }) {
   const { status, elapsed, todayEntries, start, pause, resume, stop } = useTimer()
   const settings = useSettings()
   const [now, setNow] = useState(Date.now())
+  const [editingEntry, setEditingEntry] = useState(null)
   const currentYear = new Date().getFullYear()
   const allEntries = useLiveQuery(() => db.timeEntries.toArray(), [], [])
   const allVacations = useLiveQuery(() => db.vacations.toArray(), [], [])
@@ -291,7 +294,11 @@ export default function Timer({ onShowDay, onShowVacations, onAddAbsence }) {
             }}>
               Pause
             </button>
-            <button onClick={() => onShowDay(today)} style={clockBtnStyle}>⏱</button>
+            <button onClick={() => {
+              const open = (todayEntries || []).find(e => !e.endTime)
+              if (open) setEditingEntry(open)
+              else onShowDay(today)
+            }} style={clockBtnStyle}>⏱</button>
           </>
         )}
         {status === 'paused' && (
@@ -310,7 +317,11 @@ export default function Timer({ onShowDay, onShowVacations, onAddAbsence }) {
             }}>
               Weiter
             </button>
-            <button onClick={() => onShowDay(today)} style={clockBtnStyle}>⏱</button>
+            <button onClick={() => {
+              const open = (todayEntries || []).find(e => !e.endTime)
+              if (open) setEditingEntry(open)
+              else onShowDay(today)
+            }} style={clockBtnStyle}>⏱</button>
           </>
         )}
       </div>
@@ -332,6 +343,18 @@ export default function Timer({ onShowDay, onShowVacations, onAddAbsence }) {
           <span>📅</span> Abwesenheit eintragen
         </button>
       </div>
+
+      {editingEntry && (
+        <EditEntryModal
+          entry={editingEntry}
+          date={today}
+          onClose={() => setEditingEntry(null)}
+          onDelete={async () => {
+            await db.timeEntries.delete(editingEntry.id)
+            setEditingEntry(null)
+          }}
+        />
+      )}
     </div>
   )
 }
