@@ -1,9 +1,9 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useSettings, useMonthEntries, useVacations } from '../hooks/useTimeEntries'
 import { startOfWeek, addDays, getISOWeek, format } from 'date-fns'
 import {
   getWeekNumber, formatDuration, calculateDailyTarget, getDayEntries,
-  calculateWorkedMinutes, getMonthWeeks, getWorkingDaysInMonth, getWorkingDaysUpToDate, isVacationDay,
+  calculateWorkedMinutes, getMonthWeeks, getWorkingDaysInMonth, getWorkingDaysUpToDate, isVacationDay, getVacationType, toDateStr,
 } from '../utils/calculations'
 
 const MONTH_NAMES = [
@@ -11,25 +11,32 @@ const MONTH_NAMES = [
   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
 ]
 
-export default function MonthView() {
-  const now = new Date()
+const MAX_HOURS = 70
+
+export default function MonthView({ onSelectWeek }) {
   const [monthOffset, setMonthOffset] = useState(0)
   const settings = useSettings()
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(iv)
+  }, [])
 
-  const viewDate = useMemo(() => {
-    const d = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
-    return d
-  }, [monthOffset])
+  const viewDate = useMemo(() => new Date(new Date().getFullYear(), new Date().getMonth() + monthOffset, 1), [monthOffset])
 
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth()
   const entries = useMonthEntries(year, month)
+  const prevMonthEntries = useMonthEntries(month === 0 ? year - 1 : year, month === 0 ? 11 : month - 1)
+  const nextMonthEntries = useMonthEntries(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1)
+  const allEntries = [...(prevMonthEntries || []), ...(entries || []), ...(nextMonthEntries || [])]
   const vacations = useVacations(year)
 
-  const dailyTarget = settings ? calculateDailyTarget(settings.weeklyHours, settings.workDays) : 8
+  const dailyTarget = settings ? calculateDailyTarget(settings.weeklyHours, settings.workDays) : 480
   const workDays = settings?.workDays || [1, 2, 3, 4, 5]
+  const todayStr = toDateStr(new Date())
+  const weeklyTargetHours = (settings?.weeklyHours || 40)
 
-  const weeklyTarget = (settings?.weeklyHours || 40) * 60
   const weeks = getMonthWeeks(year, month)
 
   const weekData = weeks.map(weekNum => {
@@ -39,21 +46,39 @@ export default function MonthView() {
     const monday = startOfWeek(refDate, { weekStartsOn: 1 })
     const dates = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
 
-    let totalWorked = 0
-    dates.forEach(date => {
-      const dateStr = format(date, 'yyyy-MM-dd')
-      const dayEntries = getDayEntries(entries || [], dateStr)
-      totalWorked += calculateWorkedMinutes(dayEntries)
-    })
-    const workingDaysInWeek = dates.filter(d => {
-      const dow = d.getDay() === 0 ? 7 : d.getDay()
-      return workDays.includes(dow) && d.getMonth() === month
-    }).length
-    const target = workingDaysInWeek * dailyTarget
-    return { weekNum, totalWorked, target, hours: totalWorked / 60 }
-  })
+    let workedMin = 0
+    let vacationMin = 0
+    let sickMin = 0
 
-  const maxHours = Math.max(...weekData.map(w => w.hours), 1)
+    dates.forEach(date => {
+      const dateStr = toDateStr(date)
+      const dayEntries = getDayEntries(allEntries, dateStr)
+      const worked = calculateWorkedMinutes(dayEntries)
+      const dow = date.getDay() === 0 ? 7 : date.getDay()
+      const isWork = workDays.includes(dow)
+      const vacType = getVacationType(date, vacations || [])
+      const vacEntry = (vacations || []).find(v => dateStr >= v.startDate && dateStr <= v.endDate)
+      const halfFactor = vacEntry?.halfDay ? 0.5 : 1
+
+      if (vacType === 'Krankheit' && isWork) {
+        sickMin += dailyTarget * halfFactor
+      } else if (vacType && isWork) {
+        vacationMin += dailyTarget * halfFactor
+      }
+      workedMin += worked
+      if (dateStr === todayStr) {
+        const openEntry = dayEntries.find(e => !e.endTime && e.type === 'work')
+        if (openEntry) workedMin += (now - new Date(openEntry.startTime).getTime()) / 60000
+      }
+    })
+
+    const workedH = workedMin / 60
+    const vacH = vacationMin / 60
+    const sickH = sickMin / 60
+    const totalH = workedH + vacH + sickH
+
+    return { weekNum, workedH, vacH, sickH, totalH, monday }
+  })
 
   const totalWorkingDays = getWorkingDaysInMonth(year, month, workDays)
   const totalSoll = totalWorkingDays * dailyTarget
@@ -65,7 +90,19 @@ export default function MonthView() {
     : totalWorkingDays
   const sollBisJetzt = workingDaysSoFar * dailyTarget
 
-  const totalWorked = weekData.reduce((s, w) => s + w.totalWorked, 0)
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  let totalWorked = 0
+  let liveExtra = 0
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const dayEntries = getDayEntries(entries || [], dateStr)
+    totalWorked += calculateWorkedMinutes(dayEntries)
+    if (dateStr === todayStr) {
+      const openEntry = dayEntries.find(e => !e.endTime && e.type === 'work')
+      if (openEntry) liveExtra = (now - new Date(openEntry.startTime).getTime()) / 60000
+    }
+  }
+  totalWorked += liveExtra
   const diffSoFar = totalWorked - sollBisJetzt
   const diffTotal = totalWorked - totalSoll
 
@@ -78,58 +115,99 @@ export default function MonthView() {
   })
 
   const touchStart = useRef(null)
+  const [slideDir, setSlideDir] = useState(null)
+  const [isSliding, setIsSliding] = useState(false)
   const handleTouchStart = (e) => { touchStart.current = e.touches[0].clientX }
   const handleTouchEnd = (e) => {
     if (touchStart.current === null) return
     const diff = e.changedTouches[0].clientX - touchStart.current
     if (Math.abs(diff) > 60) {
-      setMonthOffset(m => diff > 0 ? m - 1 : m + 1)
+      const dir = diff > 0 ? 'right' : 'left'
+      setSlideDir(dir)
+      setIsSliding(true)
+      setTimeout(() => {
+        setMonthOffset(m => dir === 'right' ? m - 1 : m + 1)
+        setSlideDir(null)
+        setIsSliding(false)
+      }, 200)
     }
     touchStart.current = null
   }
 
+  const targetLinePct = (weeklyTargetHours / MAX_HOURS) * 100
+
   return (
     <div className="page" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <div style={{
+        transition: 'transform 0.2s ease, opacity 0.2s ease',
+        transform: slideDir === 'left' ? 'translateX(-30px)' : slideDir === 'right' ? 'translateX(30px)' : 'translateX(0)',
+        opacity: isSliding ? 0.3 : 1,
+      }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <button onClick={() => setMonthOffset(m => m - 1)} style={navBtn}>←</button>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>
           {MONTH_NAMES[month]} {year}
         </h1>
         <button onClick={() => setMonthOffset(m => m + 1)} style={navBtn}>→</button>
       </div>
 
       {/* Bar chart */}
-      <div style={{
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around',
-        height: 180, marginBottom: 24, padding: '0 8px',
-      }}>
-        {weekData.map((week) => {
-          const heightPct = maxHours > 0 ? (week.hours / maxHours) * 100 : 0
-          const color = week.totalWorked > week.target ? 'var(--olive)' : 'var(--blue)'
-          const isSmall = week.hours < maxHours * 0.3
-          return (
-            <div key={week.weekNum} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                {week.hours > 0 ? week.hours.toFixed(1).replace('.', ',') : ''}
-              </span>
-              <div style={{
-                width: 36, borderRadius: 18,
-                height: `${Math.max(heightPct, 3)}%`,
-                background: week.hours > 0 ? color : '#2c2c2e',
-                minHeight: 8,
-                transition: 'height 0.3s ease',
-              }} />
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8 }}>
-                KW {week.weekNum}
-              </span>
+      {(() => {
+        const chartH = 200
+        const targetLineBottom = (weeklyTargetHours / MAX_HOURS) * chartH
+        return (
+          <div style={{ position: 'relative', marginBottom: 20, height: chartH + 40 }}>
+            {/* Target line */}
+            <div style={{
+              position: 'absolute', left: 0, right: 0,
+              bottom: targetLineBottom + 20,
+              borderTop: '2px dashed var(--text-muted)',
+              zIndex: 1, pointerEvents: 'none',
+            }}>
+              <span style={{ position: 'absolute', right: 0, top: -14, fontSize: 10, color: 'var(--text-secondary)' }}>{weeklyTargetHours}h</span>
             </div>
-          )
-        })}
-      </div>
 
-      {/* Dashed target line reference */}
-      <div style={{ borderTop: '1px dashed #3a3a3c', marginBottom: 24 }} />
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: chartH + 40, padding: '0 4px' }}>
+              {weekData.map((week) => {
+                const sickPx = (week.sickH / MAX_HOURS) * chartH
+                const vacPx = (week.vacH / MAX_HOURS) * chartH
+                const workedPx = (week.workedH / MAX_HOURS) * chartH
+                const totalPx = sickPx + vacPx + workedPx
+                return (
+                  <button
+                    key={week.weekNum}
+                    onClick={() => onSelectWeek && onSelectWeek(week.weekNum, week.monday)}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1,
+                      background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                    }}
+                  >
+                    <span style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4, height: 14 }}>
+                      {week.totalH > 0 ? week.totalH.toFixed(0) + 'h' : ''}
+                    </span>
+                    <div style={{ width: 32, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: Math.max(totalPx, 0) }}>
+                      {workedPx > 0 && <div style={{ height: workedPx, background: 'var(--green)' }} />}
+                      {vacPx > 0 && <div style={{ height: vacPx, background: 'var(--purple)' }} />}
+                      {sickPx > 0 && <div style={{ height: sickPx, background: 'var(--yellow)' }} />}
+                    </div>
+                    <span style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6, height: 14 }}>
+                      KW{week.weekNum}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16, justifyContent: 'center' }}>
+        <LegendDot color="var(--green)" label="Arbeit" />
+        <LegendDot color="var(--purple)" label="Abwesend" />
+        <LegendDot color="var(--yellow)" label="Krank" />
+      </div>
 
       {/* Summary: so far */}
       <div style={{ background: 'var(--card)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
@@ -144,7 +222,7 @@ export default function MonthView() {
       </div>
 
       {/* Summary: total month */}
-      <div style={{ background: 'var(--card)', borderRadius: 12, padding: 16, marginBottom: 24 }}>
+      <div style={{ background: 'var(--card)', borderRadius: 12, padding: 16, marginBottom: 20 }}>
         <Row label="Geleistete Zeit" value={formatDuration(totalWorked)} />
         <Divider />
         <Row label="Sollstunden" value={formatDuration(totalSoll)} />
@@ -171,6 +249,7 @@ export default function MonthView() {
           ))}
         </div>
       )}
+      </div>{/* end slide wrapper */}
     </div>
   )
 }
@@ -185,7 +264,16 @@ function Row({ label, value, valueColor }) {
 }
 
 function Divider() {
-  return <div style={{ borderBottom: '1px solid #2c2c2e' }} />
+  return <div style={{ borderBottom: '1px solid var(--divider)' }} />
+}
+
+function LegendDot({ color, label }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div style={{ width: 10, height: 10, borderRadius: 5, background: color }} />
+      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{label}</span>
+    </div>
+  )
 }
 
 const navBtn = {

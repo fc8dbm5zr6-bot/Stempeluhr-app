@@ -1,23 +1,51 @@
 import Papa from 'papaparse'
 import { formatTime } from './calculations'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 
 async function downloadCSV(csvString, filename) {
-  const blob = new Blob(['﻿' + csvString], { type: 'text/csv;charset=utf-8;' })
-  const file = new File([blob], filename, { type: 'text/csv' })
+  const content = '﻿' + csvString
 
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+  // Check if running in Capacitor native app
+  const isNative = typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform()
+
+  if (isNative) {
     try {
-      await navigator.share({ files: [file], title: filename })
+      const result = await Filesystem.writeFile({
+        path: filename,
+        data: btoa(unescape(encodeURIComponent(content))),
+        directory: Directory.Cache,
+      })
+      await Share.share({
+        title: filename,
+        url: result.uri,
+      })
       return
-    } catch {}
+    } catch (e) {
+      console.error('Native share failed:', e)
+    }
   }
 
+  // Web: Try Share API with file
+  try {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+    const file = new File([blob], filename, { type: 'text/csv' })
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: filename })
+      return
+    }
+  } catch {}
+
+  // Web: Download link
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = filename
+  a.style.display = 'none'
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url) }, 100)
 }
 
 export function exportAll(entries, vacations, settings) {

@@ -4,7 +4,7 @@ import { useSettings } from '../hooks/useTimeEntries'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   formatDuration, calculateDailyTarget, calculateWorkedMinutes,
-  getWorkingDaysInMonth, isVacationDay, getDayEntries,
+  getWorkingDaysInMonth, isVacationDay, getVacationType, getDayEntries, toDateStr,
 } from '../utils/calculations'
 
 export default function OvertimeAccount({ onClose }) {
@@ -36,15 +36,21 @@ export default function OvertimeAccount({ onClose }) {
       if (firstEntryDate && dateStr < firstEntryDate) continue
       if (dateObj > today) continue
       const dow = dateObj.getDay() === 0 ? 7 : dateObj.getDay()
-      if (workDays.includes(dow)) {
-        if (isVacationDay(dateObj, allVacations)) {
-          vacDays++
-        } else {
-          workingDays++
-        }
-      }
+      const vac = allVacations.find(v => dateStr >= v.startDate && dateStr <= v.endDate)
+      const vacType = vac ? vac.type : null
       const dayEntries = getDayEntries(allEntries, dateStr)
-      workedMin += calculateWorkedMinutes(dayEntries)
+
+      if (vacType === 'Krankheit') {
+        // Sick: neutral
+      } else if (vacType) {
+        if (workDays.includes(dow)) {
+          if (vac.halfDay) workingDays += 0.5
+        }
+        workedMin += calculateWorkedMinutes(dayEntries)
+      } else {
+        if (workDays.includes(dow)) workingDays++
+        workedMin += calculateWorkedMinutes(dayEntries)
+      }
     }
 
     const sollMin = workingDays * dailyTarget
@@ -80,9 +86,9 @@ export default function OvertimeAccount({ onClose }) {
   }
 
   return (
-    <div className="page" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+    <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 16px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text)', fontSize: 24, cursor: 'pointer' }}>←</button>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Überstundenkonto</h1>
         <div style={{ width: 24 }} />
       </div>
@@ -136,6 +142,44 @@ export default function OvertimeAccount({ onClose }) {
           )}
         </div>
       </div>
+
+      {/* Planned absences */}
+      {(() => {
+        const todayD = toDateStr(new Date())
+        const futureFza = allVacations.filter(v => v.type === 'Freizeitausgleich' && v.startDate > todayD)
+        const futureUrlaub = allVacations.filter(v => v.type === 'Urlaub' && v.startDate > todayD)
+        const futureAll = [...futureFza, ...futureUrlaub].sort((a, b) => a.startDate.localeCompare(b.startDate))
+        if (futureAll.length === 0) return null
+        return (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12, paddingLeft: 4 }}>
+              GEPLANTE ABWESENHEITEN
+            </div>
+            <div style={{ background: 'var(--card)', borderRadius: 12, overflow: 'hidden' }}>
+              {futureAll.map((v, i) => (
+                <div key={v.id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '12px 16px', borderBottom: i < futureAll.length - 1 ? '1px solid var(--divider)' : 'none',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>
+                      {new Date(v.startDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
+                      {v.startDate !== v.endDate && ` – ${new Date(v.endDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}`}
+                      {v.halfDay && ' (½)'}
+                    </div>
+                    {v.note && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{v.note}</div>}
+                  </div>
+                  <span style={{
+                    fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 8,
+                    background: v.type === 'Freizeitausgleich' ? 'var(--orange)' : 'var(--blue)',
+                    color: '#fff',
+                  }}>{v.type === 'Freizeitausgleich' ? 'FZA' : 'Urlaub'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Adjustments */}
       {adjustments.length > 0 && (
@@ -207,8 +251,27 @@ export default function OvertimeAccount({ onClose }) {
           </div>
         </div>
       )}
+
+      <div style={{ height: 70 }} />
+    </div>{/* end scroll area */}
+
+      {/* Action buttons */}
+      <div style={{
+        display: 'flex', justifyContent: 'center', gap: 16,
+        padding: '10px 0', flexShrink: 0,
+      }}>
+        <button onClick={onClose} style={circleBtnStyle}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+        </button>
+      </div>
     </div>
   )
+}
+
+const circleBtnStyle = {
+  width: 50, height: 50, borderRadius: 25, border: 'none',
+  background: '#3a3a3c', color: 'var(--text)', fontSize: 22,
+  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
 }
 
 function getMonthsFromEntries(entries) {

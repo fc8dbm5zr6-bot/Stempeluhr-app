@@ -58,8 +58,10 @@ export function getFeiertage(year, bundesland = 'NW') {
     { date: fmt(addDays(easter, 39)), name: 'Christi Himmelfahrt' },
     { date: fmt(addDays(easter, 50)), name: 'Pfingstmontag' },
     { date: `${year}-10-03`, name: 'Tag der Deutschen Einheit' },
+    { date: `${year}-12-24`, name: 'Heiligabend', halfDay: true },
     { date: `${year}-12-25`, name: '1. Weihnachtsfeiertag' },
     { date: `${year}-12-26`, name: '2. Weihnachtsfeiertag' },
+    { date: `${year}-12-31`, name: 'Silvester', halfDay: true },
   ]
 
   if (['BW', 'BY', 'ST'].includes(bundesland)) {

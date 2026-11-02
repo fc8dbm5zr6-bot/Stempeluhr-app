@@ -5,6 +5,7 @@ import { exportAll, importAll } from '../utils/csv'
 import { useLiveQuery } from 'dexie-react-hooks'
 import VacationManager from './VacationManager'
 import OvertimeAccount from './OvertimeAccount'
+import YearSummary from './YearSummary'
 import { getFeiertage, getBundeslaender } from '../utils/feiertage'
 
 const DAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
@@ -14,6 +15,7 @@ export default function Settings() {
   const settings = useSettings()
   const [showVacations, setShowVacations] = useState(false)
   const [showOvertime, setShowOvertime] = useState(false)
+  const [showYearSummary, setShowYearSummary] = useState(false)
   const [editPlan, setEditPlan] = useState(false)
   const [showTheme, setShowTheme] = useState(false)
   const [themeMode, setThemeMode] = useState(() => { try { return localStorage.getItem('themeMode') || 'system' } catch { return 'system' } })
@@ -70,6 +72,7 @@ export default function Settings() {
 
   if (showVacations) return <VacationManager onClose={() => setShowVacations(false)} />
   if (showOvertime) return <OvertimeAccount onClose={() => setShowOvertime(false)} />
+  if (showYearSummary) return <YearSummary onClose={() => setShowYearSummary(false)} />
 
   return (
     <div className="page">
@@ -140,6 +143,24 @@ export default function Settings() {
             marginTop: 8, padding: '10px 0', borderRadius: 8, border: 'none', width: '100%',
             background: 'var(--blue)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
           }}>Feiertage synchronisieren</button>
+
+          {/* Heiligabend/Silvester */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 14 }}>24.12. + 31.12. geschenkt</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Halbe Tage frei vom AG</div>
+            </div>
+            <button onClick={() => updateSetting('halfDaysGifted', !settings.halfDaysGifted)} style={{
+              width: 51, height: 31, borderRadius: 16, border: 'none',
+              background: settings.halfDaysGifted ? 'var(--purple)' : 'var(--text-muted)',
+              position: 'relative', cursor: 'pointer', transition: 'background 0.3s',
+            }}>
+              <div style={{
+                width: 27, height: 27, borderRadius: 14, background: '#fff',
+                position: 'absolute', top: 2, left: settings.halfDaysGifted ? 22 : 2, transition: 'left 0.3s',
+              }} />
+            </button>
+          </div>
 
           {/* Vacation days */}
           <label style={{ ...labelStyle, marginTop: 16 }}>Urlaubstage pro Jahr</label>
@@ -290,6 +311,11 @@ export default function Settings() {
           <span>📅 Abwesenheiten</span>
           <span style={{ color: 'var(--text-secondary)' }}>›</span>
         </button>
+        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16 }} />
+        <button onClick={() => setShowYearSummary(true)} style={menuItemStyle}>
+          <span>📊 Jahresübersicht</span>
+          <span style={{ color: 'var(--text-secondary)' }}>›</span>
+        </button>
       </div>
 
       {/* Danger zone */}
@@ -317,6 +343,12 @@ export default function Settings() {
         }} style={{ ...menuItemStyle, color: 'var(--red)' }}>
           <span>🗑 Kompletter Reset (alle Daten)</span>
         </button>
+      </div>
+
+      {/* Über */}
+      <div style={{ textAlign: 'center', padding: '24px 0 16px', color: 'var(--text-secondary)', fontSize: 13 }}>
+        <div style={{ fontWeight: 600 }}>Stempeluhr</div>
+        <div>Version 1.3</div>
       </div>
     </div>
   )

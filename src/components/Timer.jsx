@@ -3,7 +3,7 @@ import { useTimer } from '../hooks/useTimer'
 import { useSettings } from '../hooks/useTimeEntries'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
-import { formatDuration, formatTime, calculateDailyTarget, calculateWorkedMinutes, calculatePauseMinutes, toDateStr } from '../utils/calculations'
+import { formatDuration, formatTime, calculateDailyTarget, calculateWorkedMinutes, calculatePauseMinutes, toDateStr, getVacationType, countAbsenceWorkDays } from '../utils/calculations'
 
 function pad(n) {
   return String(n).padStart(2, '0')
@@ -18,7 +18,7 @@ function formatElapsed(totalSeconds) {
 
 import EditEntryModal from './EditEntryModal'
 
-export default function Timer({ onShowDay, onShowVacations, onAddAbsence }) {
+export default function Timer({ onShowDay, onShowVacations, onAddAbsence, onShowOvertime }) {
   const { status, elapsed, todayEntries, start, pause, resume, stop } = useTimer()
   const settings = useSettings()
   const [now, setNow] = useState(Date.now())
@@ -73,14 +73,25 @@ export default function Timer({ onShowDay, onShowVacations, onAddAbsence }) {
     for (let d = new Date(firstEntryDate + 'T12:00:00'); d <= today; d.setDate(d.getDate() + 1)) {
       const ds = toDateStr(d)
       const dow = d.getDay() === 0 ? 7 : d.getDay()
-      if (workDays.includes(dow)) {
-        const isVac = allVacations.some(v => ds >= v.startDate && ds <= v.endDate)
-        if (!isVac) {
-          totalTarget += dailyTargetMin
-        }
-      }
+      const vac = allVacations.find(v => ds >= v.startDate && ds <= v.endDate)
+      const vacType = vac ? vac.type : null
+      const isHalf = vac ? vac.halfDay : false
       const dayEntries = allEntries.filter(e => e.date === ds)
-      totalWorked += calculateWorkedMinutes(dayEntries)
+
+      if (vacType === 'Krankheit') {
+        // Sick day: neutral, no target, no worked hours count
+      } else if (vacType) {
+        // Vacation/FZA: half day = half target covered
+        if (workDays.includes(dow)) {
+          if (isHalf) {
+            totalTarget += dailyTargetMin / 2
+          }
+        }
+        totalWorked += calculateWorkedMinutes(dayEntries)
+      } else {
+        if (workDays.includes(dow)) totalTarget += dailyTargetMin
+        totalWorked += calculateWorkedMinutes(dayEntries)
+      }
     }
     return totalWorked - totalTarget
   }, [allEntries, allVacations, workDays, dailyTargetMin])
@@ -107,71 +118,76 @@ export default function Timer({ onShowDay, onShowVacations, onAddAbsence }) {
   const timelineRange = timelineEnd && timelineStart ? timelineEnd - timelineStart : 1
   const usedVacationDays = yearVacations
     .filter(v => v.type === 'Urlaub')
-    .reduce((sum, v) => {
-      const s = new Date(v.startDate)
-      const e = new Date(v.endDate)
-      let days = 0
-      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-        const dow = d.getDay() === 0 ? 7 : d.getDay()
-        if (workDays.includes(dow)) days++
-      }
-      return sum + days
-    }, 0)
+    .reduce((sum, v) => sum + countAbsenceWorkDays(v.startDate, v.endDate, workDays, yearVacations, v.id, v.halfDay), 0)
   const remainingVacationDays = vacationDaysTotal - usedVacationDays
-  const fzaDays = yearVacations
-    .filter(v => v.type === 'Freizeitausgleich')
+  const todayDate = toDateStr(new Date())
+  const plannedFzaMinutes = (allVacations || [])
+    .filter(v => v.type === 'Freizeitausgleich' && v.startDate > todayDate)
     .reduce((sum, v) => {
       const s = new Date(v.startDate)
       const e = new Date(v.endDate)
-      let days = 0
+      let mins = 0
       for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
         const dow = d.getDay() === 0 ? 7 : d.getDay()
-        if (workDays.includes(dow)) days++
+        if (workDays.includes(dow)) mins += v.halfDay ? dailyTargetMin / 2 : dailyTargetMin
       }
-      return sum + days
+      return sum + mins
     }, 0)
+  const overtimeAfterFza = overtimeBalance - plannedFzaMinutes
+
+  const [showFzaDetail, setShowFzaDetail] = useState(false)
+  const [showPastFza, setShowPastFza] = useState(false)
+  const fzaEntries = (allVacations || []).filter(v => v.type === 'Freizeitausgleich')
+  const futureFza = fzaEntries.filter(v => v.startDate > todayDate)
+  const pastFza = fzaEntries.filter(v => v.startDate <= todayDate)
 
   return (
     <div className="page">
-      {/* Zeitkonto + Urlaub */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <div style={{
-          flex: 1, background: 'var(--card)', borderRadius: 12, padding: '10px 14px',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
+      {/* Zeitkonto */}
+      <button onClick={() => onShowOvertime && onShowOvertime()} style={{
+        width: '100%', background: 'var(--card)', borderRadius: 12, padding: '10px 14px',
+        marginBottom: 8, border: 'none', cursor: 'pointer', color: 'var(--text)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
           <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Zeitkonto</span>
-          <span style={{
-            fontSize: 16, fontWeight: 600,
-            color: overtimeBalance >= 0 ? 'var(--green)' : 'var(--red)',
-          }}>
+          <span style={{ fontSize: 16, fontWeight: 600, color: overtimeBalance >= 0 ? 'var(--green)' : 'var(--red)' }}>
             {overtimeBalance >= 0 ? '+' : ''}{formatDuration(Math.abs(overtimeBalance))}
           </span>
         </div>
-        <button onClick={() => onShowVacations && onShowVacations()} style={{
-          flex: 1, background: 'var(--card)', borderRadius: 12, padding: '10px 14px',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          border: 'none', cursor: 'pointer', color: 'var(--text)',
-        }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Urlaub</span>
-          <span style={{ fontSize: 16, fontWeight: 600 }}>
-            {remainingVacationDays}/{vacationDaysTotal}
-          </span>
-        </button>
-      </div>
-      {fzaDays > 0 && (
-        <div style={{
-          background: 'var(--card)', borderRadius: 12, padding: '8px 14px',
-          marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Freizeitausgleich</span>
-          <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--orange)' }}>{fzaDays} Tage</span>
-        </div>
-      )}
+        {plannedFzaMinutes > 0 && (<>
+          <div style={{ borderBottom: '1px solid var(--divider)', margin: '2px 0' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Verplant</span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--orange)' }}>
+              -{formatDuration(plannedFzaMinutes)}
+            </span>
+          </div>
+          <div style={{ borderBottom: '1px solid var(--divider)', margin: '2px 0' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Verfügbar</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: overtimeAfterFza >= 0 ? 'var(--green)' : 'var(--red)' }}>
+              {overtimeAfterFza >= 0 ? '+' : ''}{formatDuration(Math.abs(overtimeAfterFza))}
+            </span>
+          </div>
+        </>)}
+      </button>
+
+      {/* Urlaub */}
+      <button onClick={() => onShowVacations && onShowVacations()} style={{
+        width: '100%', background: 'var(--card)', borderRadius: 12, padding: '10px 14px',
+        marginBottom: 12, border: 'none', cursor: 'pointer', color: 'var(--text)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Urlaub</span>
+        <span style={{ fontSize: 16, fontWeight: 600 }}>
+          {remainingVacationDays}/{vacationDaysTotal}
+        </span>
+      </button>
 
       {/* Timer display */}
       <div style={{ textAlign: 'center', marginTop: 0, marginBottom: 8 }}>
         <div style={{
-          fontSize: 56,
+          fontSize: 64,
           fontWeight: 200,
           fontVariantNumeric: 'tabular-nums',
           letterSpacing: -2,
@@ -343,6 +359,89 @@ export default function Timer({ onShowDay, onShowVacations, onAddAbsence }) {
           <span>📅</span> Abwesenheit eintragen
         </button>
       </div>
+
+      {/* Freizeitausgleich Detail */}
+      {showFzaDetail && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 300,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        }}>
+          <div style={{ background: 'var(--card)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, maxHeight: '80vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Freizeitausgleich</h2>
+              <button onClick={() => setShowFzaDetail(false)} style={{
+                width: 36, height: 36, borderRadius: 18, border: 'none', background: '#3a3a3c', color: 'var(--text)', fontSize: 16, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+              </button>
+            </div>
+
+            <div style={{ background: 'var(--bg-input)', borderRadius: 10, padding: 12, marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Überstunden aktuell</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: overtimeBalance >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                  {overtimeBalance >= 0 ? '+' : ''}{formatDuration(Math.abs(overtimeBalance))}
+                </span>
+              </div>
+              {plannedFzaDays > 0 && (<>
+                <div style={{ borderBottom: '1px solid var(--divider)', margin: '4px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Geplant abzufeiern</span>
+                  <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--orange)' }}>-{formatDuration(plannedFzaMinutes)}</span>
+                </div>
+                <div style={{ borderBottom: '1px solid var(--divider)', margin: '4px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Verbleibend</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: overtimeAfterFza >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                    {overtimeAfterFza >= 0 ? '+' : ''}{formatDuration(Math.abs(overtimeAfterFza))}
+                  </span>
+                </div>
+              </>)}
+            </div>
+
+            {futureFza.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>Geplant</div>
+                {futureFza.map(v => (
+                  <div key={v.id} style={{ background: 'var(--bg-input)', borderRadius: 10, padding: '10px 14px', marginBottom: 6 }}>
+                    <div style={{ fontWeight: 500, fontSize: 14 }}>
+                      {new Date(v.startDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
+                      {v.startDate !== v.endDate && ` – ${new Date(v.endDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}`}
+                    </div>
+                    {v.note && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{v.note}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {pastFza.length > 0 && (
+              <div>
+                <button onClick={() => setShowPastFza(!showPastFza)} style={{
+                  background: 'none', border: 'none', color: 'var(--blue)', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 8,
+                }}>
+                  {showPastFza ? '▼' : '►'} Vergangene ({pastFza.length})
+                </button>
+                {showPastFza && pastFza.map(v => (
+                  <div key={v.id} style={{ background: 'var(--bg-input)', borderRadius: 10, padding: '10px 14px', marginBottom: 6, opacity: 0.6 }}>
+                    <div style={{ fontWeight: 500, fontSize: 14 }}>
+                      {new Date(v.startDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
+                      {v.startDate !== v.endDate && ` – ${new Date(v.endDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}`}
+                    </div>
+                    {v.note && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{v.note}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {fzaEntries.length === 0 && (
+              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>
+                Kein Freizeitausgleich eingetragen
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {editingEntry && (
         <EditEntryModal
