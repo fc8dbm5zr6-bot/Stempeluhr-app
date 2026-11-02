@@ -6,6 +6,7 @@ import MonthView from './components/MonthView'
 import DayDetail from './components/DayDetail'
 import Settings from './components/Settings'
 import VacationManager from './components/VacationManager'
+import OvertimeAccount from './components/OvertimeAccount'
 import { db } from './db'
 import { toDateStr } from './utils/calculations'
 import { exportAll } from './utils/csv'
@@ -14,6 +15,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('start')
   const [selectedDate, setSelectedDate] = useState(null)
   const [showVacations, setShowVacations] = useState(false)
+  const [showOvertime, setShowOvertime] = useState(false)
+  const [initialWeekDate, setInitialWeekDate] = useState(null)
   const [showBackupReminder, setShowBackupReminder] = useState(false)
 
   useEffect(() => {
@@ -34,6 +37,8 @@ export default function App() {
   function handleTabChange(tab) {
     if (tab === activeTab) setTabResetKey(k => k + 1)
     setSelectedDate(null)
+    setShowVacations(false)
+    setShowOvertime(false)
     setActiveTab(tab)
   }
 
@@ -43,12 +48,17 @@ export default function App() {
         return <Timer
           onShowDay={(d) => setSelectedDate(d)}
           onShowVacations={() => setShowVacations(true)}
+          onShowOvertime={() => setShowOvertime(true)}
           onAddAbsence={() => setShowQuickAbsence(true)}
         />
       case 'woche':
-        return <WeekView key={tabResetKey} onSelectDay={(d) => setSelectedDate(d)} />
+        return <WeekView key={tabResetKey} onSelectDay={(d) => setSelectedDate(d)} initialDate={initialWeekDate} />
       case 'monat':
-        return <MonthView key={tabResetKey} />
+        return <MonthView key={tabResetKey} onSelectWeek={(weekNum, monday) => {
+          setInitialWeekDate(monday)
+          setTabResetKey(k => k + 1)
+          setActiveTab('woche')
+        }} />
       case 'urlaub':
         return <VacationManager onClose={() => setActiveTab('start')} />
 
@@ -64,15 +74,14 @@ export default function App() {
       <div className="app-container">
         {selectedDate ? (
           <DayDetail date={selectedDate} onClose={() => setSelectedDate(null)} />
+        ) : showVacations ? (
+          <VacationManager onClose={() => setShowVacations(false)} />
+        ) : showOvertime ? (
+          <OvertimeAccount onClose={() => setShowOvertime(false)} />
         ) : (
           renderTab()
         )}
       </div>
-      {showVacations && (
-        <div className="page-fullscreen" style={{ zIndex: 250 }}>
-          <VacationManager onClose={() => setShowVacations(false)} />
-        </div>
-      )}
       {showQuickAbsence && (
         <QuickAbsenceForm
           onSave={async (data) => {
@@ -132,6 +141,7 @@ function QuickAbsenceForm({ onSave, onCancel }) {
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
   const [note, setNote] = useState('')
+  const [halfDay, setHalfDay] = useState(false)
 
   return (
     <div style={{
@@ -160,6 +170,17 @@ function QuickAbsenceForm({ onSave, onCancel }) {
         <label style={{ ...qfLabel, marginTop: 12 }}>Bis</label>
         <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={qfInput} />
 
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 12 }}>
+          <span style={{ fontSize: 14, color: 'var(--text)' }}>Halber Tag</span>
+          <button onClick={() => setHalfDay(!halfDay)} style={{
+            width: 51, height: 31, borderRadius: 16, border: 'none',
+            background: halfDay ? 'var(--blue)' : 'var(--text-muted)',
+            position: 'relative', cursor: 'pointer',
+          }}>
+            <div style={{ width: 27, height: 27, borderRadius: 14, background: '#fff', position: 'absolute', top: 2, left: halfDay ? 22 : 2, transition: 'left 0.3s' }} />
+          </button>
+        </div>
+
         <label style={{ ...qfLabel, marginTop: 12 }}>Notiz</label>
         <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional" style={qfInput} />
 
@@ -168,7 +189,7 @@ function QuickAbsenceForm({ onSave, onCancel }) {
             flex: 1, padding: '14px 0', borderRadius: 10, border: '1px solid var(--divider)',
             background: 'transparent', color: 'var(--text)', fontSize: 15, cursor: 'pointer',
           }}>Abbrechen</button>
-          <button onClick={() => onSave({ type, startDate, endDate, note })} style={{
+          <button onClick={() => onSave({ type, startDate, endDate, note, halfDay })} style={{
             flex: 1, padding: '14px 0', borderRadius: 10, border: 'none',
             background: 'var(--green)', color: '#000', fontSize: 15, fontWeight: 600, cursor: 'pointer',
           }}>Speichern</button>

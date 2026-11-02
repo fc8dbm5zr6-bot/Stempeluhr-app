@@ -272,7 +272,9 @@ export default function DayDetail({ date, onClose }) {
         display: 'flex', justifyContent: 'center', gap: 16,
         padding: '10px 0', flexShrink: 0,
       }}>
-        <button onClick={onClose} style={circleBtn}>✕</button>
+        <button onClick={onClose} style={circleBtn}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+        </button>
         <button onClick={addManualEntry} style={{ ...circleBtn, background: 'var(--blue)' }}>+</button>
       </div>
 

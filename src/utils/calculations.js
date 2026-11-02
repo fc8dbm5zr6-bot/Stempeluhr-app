@@ -157,6 +157,27 @@ export function toDateStr(date) {
   return format(typeof date === 'string' ? parseISO(date) : date, 'yyyy-MM-dd')
 }
 
+export function countAbsenceWorkDays(startDate, endDate, workDays, allVacations, selfId, isHalfDay) {
+  if (!startDate || !endDate) return 0
+  if (isHalfDay) return 0.5
+  const feiertage = (allVacations || []).filter(v => v.type === 'Feiertag' && v.id !== selfId)
+  let count = 0
+  const s = new Date(startDate + 'T12:00:00')
+  const e = new Date(endDate + 'T12:00:00')
+  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay() === 0 ? 7 : d.getDay()
+    if (!workDays.includes(dow)) continue
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const ft = feiertage.find(f => ds >= f.startDate && ds <= f.endDate)
+    if (ft) {
+      if (ft.halfDay) count += 0.5
+    } else {
+      count += 1
+    }
+  }
+  return count
+}
+
 export function todayStr() {
   return format(new Date(), 'yyyy-MM-dd')
 }
