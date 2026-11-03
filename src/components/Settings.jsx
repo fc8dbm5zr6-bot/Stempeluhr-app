@@ -257,7 +257,7 @@ export default function Settings() {
           <span>📄 Alle Daten als CSV exportieren</span>
           <span style={{ color: 'var(--text-secondary)' }}>›</span>
         </button>
-        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16 }} />
+        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16, marginRight: 16 }} />
         <button onClick={handleImport} style={menuItemStyle}>
           <span>📥 Daten aus CSV importieren</span>
           <span style={{ color: 'var(--text-secondary)' }}>›</span>
@@ -306,12 +306,12 @@ export default function Settings() {
           <span>⏱ Überstundenkonto</span>
           <span style={{ color: 'var(--text-secondary)' }}>›</span>
         </button>
-        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16 }} />
+        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16, marginRight: 16 }} />
         <button onClick={() => setShowVacations(true)} style={menuItemStyle}>
           <span>📅 Abwesenheiten</span>
           <span style={{ color: 'var(--text-secondary)' }}>›</span>
         </button>
-        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16 }} />
+        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16, marginRight: 16 }} />
         <button onClick={() => setShowYearSummary(true)} style={menuItemStyle}>
           <span>📊 Jahresübersicht</span>
           <span style={{ color: 'var(--text-secondary)' }}>›</span>
@@ -329,7 +329,7 @@ export default function Settings() {
         }} style={{ ...menuItemStyle, color: 'var(--red)' }}>
           <span>🗑 Alle Zeiteinträge löschen</span>
         </button>
-        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16 }} />
+        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16, marginRight: 16 }} />
         <button onClick={async () => {
           if (confirm('ALLE Daten löschen (Zeiteinträge, Abwesenheiten, Einstellungen)? Dies kann nicht rückgängig gemacht werden.')) {
             await db.timeEntries.clear()
@@ -348,7 +348,7 @@ export default function Settings() {
       {/* Über */}
       <div style={{ textAlign: 'center', padding: '24px 0 16px', color: 'var(--text-secondary)', fontSize: 13 }}>
         <div style={{ fontWeight: 600 }}>Stempeluhr</div>
-        <div>Version 1.3</div>
+        <div>Version 1.3.1</div>
       </div>
     </div>
   )

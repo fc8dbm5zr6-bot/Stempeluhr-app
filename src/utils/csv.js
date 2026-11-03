@@ -58,7 +58,7 @@ export function exportAll(entries, vacations, settings) {
       Start: '',
       Ende: '',
       Zuschlag: '',
-      Kommentar: `planName=${settings.planName || 'Mein Job'}|weeklyHours=${settings.weeklyHours}|workDays=${(settings.workDays || []).join(',')}|vacationDaysPerYear=${settings.vacationDaysPerYear || 30}|bundesland=${settings.bundesland || 'NW'}`,
+      Kommentar: `planName=${settings.planName || 'Mein Job'}|weeklyHours=${settings.weeklyHours}|workDays=${(settings.workDays || []).join(',')}|vacationDaysPerYear=${settings.vacationDaysPerYear || 30}|bundesland=${settings.bundesland || 'NW'}|multipliers=${(settings.multipliers || []).join(',')}|halfDaysGifted=${settings.halfDaysGifted ? '1' : '0'}`,
     })
   }
 
@@ -77,7 +77,7 @@ export function exportAll(entries, vacations, settings) {
     rows.push({
       Typ: v.type,
       Datum: v.startDate,
-      Start: '',
+      Start: v.halfDay ? 'halb' : '',
       Ende: v.endDate,
       Zuschlag: '',
       Kommentar: v.note || '',
@@ -111,6 +111,8 @@ export function importAll(file) {
               if (k === 'workDays') settings.workDays = v.split(',').map(Number)
               if (k === 'vacationDaysPerYear') settings.vacationDaysPerYear = Number(v)
               if (k === 'bundesland') settings.bundesland = v
+              if (k === 'multipliers' && v) settings.multipliers = v.split(',').map(Number).filter(n => n > 0)
+              if (k === 'halfDaysGifted') settings.halfDaysGifted = v === '1'
             })
             continue
           }
@@ -157,6 +159,7 @@ export function importAll(file) {
               startDate,
               endDate,
               type: typ === 'Krank' ? 'Krankheit' : typ,
+              halfDay: (row.Start || '').trim() === 'halb',
               note: row.Kommentar || '',
             })
           }

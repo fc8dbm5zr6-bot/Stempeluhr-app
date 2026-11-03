@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { db } from '../db'
 import { useSettings, useMonthEntries, useVacations } from '../hooks/useTimeEntries'
 import { startOfWeek, addDays, getISOWeek, format } from 'date-fns'
 import {
@@ -15,6 +16,7 @@ const MAX_HOURS = 70
 
 export default function MonthView({ onSelectWeek }) {
   const [monthOffset, setMonthOffset] = useState(0)
+  const [editVac, setEditVac] = useState(null)
   const settings = useSettings()
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
@@ -239,17 +241,155 @@ export default function MonthView({ onSelectWeek }) {
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
             Abwesenheiten im {MONTH_NAMES[month]}: {monthVacations.length}
           </h3>
-          {monthVacations.map((v, i) => (
-            <div key={i} style={{ background: 'var(--card)', borderRadius: 12, padding: 14, marginBottom: 8 }}>
-              <div style={{ fontWeight: 500 }}>{v.type}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-                {new Date(v.startDate).toLocaleDateString('de-DE')} – {new Date(v.endDate).toLocaleDateString('de-DE')}
-              </div>
-            </div>
-          ))}
+          {monthVacations.map((v, i) => {
+            const isFeiertag = v.type === 'Feiertag'
+            return (
+              <button
+                key={i}
+                onClick={() => { if (!isFeiertag) setEditVac(v) }}
+                style={{
+                  width: '100%', background: 'var(--card)', borderRadius: 12, padding: 14, marginBottom: 8,
+                  border: 'none', cursor: isFeiertag ? 'default' : 'pointer',
+                  color: 'var(--text)', textAlign: 'left',
+                  opacity: isFeiertag ? 0.5 : 1,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 500 }}>{v.type}{v.halfDay ? ' (½)' : ''}{v.note ? ` — ${v.note}` : ''}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+                    {new Date(v.startDate + 'T12:00:00').toLocaleDateString('de-DE')}
+                    {v.startDate !== v.endDate && ` – ${new Date(v.endDate + 'T12:00:00').toLocaleDateString('de-DE')}`}
+                  </div>
+                </div>
+                {!isFeiertag && (
+                  <span style={{ fontSize: 16, color: 'var(--text-secondary)' }}>✎</span>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
       </div>{/* end slide wrapper */}
+
+      {/* Edit vacation modal */}
+      {editVac && <EditVacModal vac={editVac} onClose={() => setEditVac(null)} workDays={workDays} allVacations={vacations || []} />}
+    </div>
+  )
+}
+
+const EDIT_TYPES = ['Urlaub', 'Freizeitausgleich', 'Krankheit']
+
+function EditVacModal({ vac, onClose, workDays, allVacations }) {
+  const [type, setType] = useState(vac.type)
+  const [startDate, setStartDate] = useState(vac.startDate)
+  const [endDate, setEndDate] = useState(vac.endDate)
+  const [note, setNote] = useState(vac.note || '')
+  const [halfDay, setHalfDay] = useState(vac.halfDay || false)
+  const [calMonth, setCalMonth] = useState(() => {
+    const d = new Date(vac.startDate)
+    return { year: d.getFullYear(), month: d.getMonth() }
+  })
+  const [selectPhase, setSelectPhase] = useState('done')
+
+  const isMultiDay = startDate && endDate && startDate !== endDate
+  const MON = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
+
+  function handleDayTap(ds) {
+    if (selectPhase === 'start' || selectPhase === 'done') {
+      setStartDate(ds); setEndDate(ds); setHalfDay(false); setSelectPhase('end')
+    } else {
+      if (ds < startDate) setStartDate(ds)
+      else if (ds === startDate) setSelectPhase('done')
+      else { setEndDate(ds); setSelectPhase('done') }
+      if (startDate !== ds) setHalfDay(false)
+    }
+  }
+
+  function isInRange(ds) { return startDate && endDate && ds >= startDate && ds <= endDate }
+
+  const calDays = (() => {
+    const first = new Date(calMonth.year, calMonth.month, 1).getDay()
+    const offset = first === 0 ? 6 : first - 1
+    const dim = new Date(calMonth.year, calMonth.month + 1, 0).getDate()
+    const cells = []
+    for (let i = 0; i < offset; i++) cells.push(null)
+    for (let d = 1; d <= dim; d++) cells.push(d)
+    return cells
+  })()
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 300, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '40px 12px 12px' }}>
+      <div style={{ background: 'var(--card)', borderRadius: 16, padding: 20, width: '100%', maxWidth: 400, margin: '0 auto' }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Abwesenheit bearbeiten</h2>
+
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>TYP</div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+          {EDIT_TYPES.map(t => (
+            <button key={t} onClick={() => setType(t)} style={{
+              flex: t === 'Freizeitausgleich' ? '1 1 100%' : 1,
+              padding: '10px 0', borderRadius: 8, border: 'none',
+              background: type === t ? (t === 'Freizeitausgleich' ? 'var(--orange)' : 'var(--purple)') : 'var(--bg-input)',
+              color: type === t ? '#fff' : 'var(--text-secondary)',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}>{t === 'Freizeitausgleich' ? '⏱ Überstunden abfeiern' : t}</button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>ZEITRAUM</div>
+        <div style={{ background: 'var(--bg-input)', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <button onClick={() => setCalMonth(m => m.month === 0 ? { year: m.year - 1, month: 11 } : { ...m, month: m.month - 1 })} style={{ background: 'none', border: 'none', color: 'var(--text)', fontSize: 18, cursor: 'pointer' }}>←</button>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>{MON[calMonth.month]} {calMonth.year}</span>
+            <button onClick={() => setCalMonth(m => m.month === 11 ? { year: m.year + 1, month: 0 } : { ...m, month: m.month + 1 })} style={{ background: 'none', border: 'none', color: 'var(--text)', fontSize: 18, cursor: 'pointer' }}>→</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, textAlign: 'center' }}>
+            {['Mo','Di','Mi','Do','Fr','Sa','So'].map(d => <div key={d} style={{ fontSize: 11, color: 'var(--text-secondary)', padding: '4px 0' }}>{d}</div>)}
+            {calDays.map((day, i) => {
+              if (!day) return <div key={`e${i}`} />
+              const ds = `${calMonth.year}-${String(calMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+              const inR = isInRange(ds)
+              const isS = ds === startDate, isE = ds === endDate, isO = isS && isE
+              const dow = new Date(calMonth.year, calMonth.month, day).getDay()
+              const isW = workDays.includes(dow === 0 ? 7 : dow)
+              return (
+                <div key={day} style={{
+                  background: inR && !isS && !isE ? 'rgba(175,82,222,0.2)' : isS && !isO ? 'linear-gradient(90deg,transparent 50%,rgba(175,82,222,0.2) 50%)' : isE && !isO ? 'linear-gradient(90deg,rgba(175,82,222,0.2) 50%,transparent 50%)' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <button onClick={() => handleDayTap(ds)} style={{
+                    width: '100%', aspectRatio: '1', borderRadius: isS || isE ? '50%' : 4,
+                    border: selectPhase === 'end' && isS ? '2px dashed var(--purple)' : 'none', cursor: 'pointer',
+                    background: isS || isE ? 'var(--purple)' : 'transparent',
+                    color: isS || isE ? '#fff' : !isW ? 'var(--text-muted)' : 'var(--text)',
+                    fontSize: 14, fontWeight: isS || isE ? 700 : 400,
+                  }}>{day}</button>
+                </div>
+              )
+            })}
+          </div>
+          {selectPhase === 'end' && <div style={{ fontSize: 12, color: 'var(--purple)', marginTop: 8, textAlign: 'center', fontWeight: 500 }}>Endtag antippen</div>}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontSize: 14, color: isMultiDay ? 'var(--text-muted)' : 'var(--text)' }}>Halber Tag</span>
+          <button onClick={() => { if (!isMultiDay) setHalfDay(!halfDay) }} style={{
+            width: 51, height: 31, borderRadius: 16, border: 'none',
+            background: halfDay ? 'var(--purple)' : 'var(--text-muted)',
+            position: 'relative', cursor: isMultiDay ? 'default' : 'pointer', opacity: isMultiDay ? 0.4 : 1,
+          }}><div style={{ width: 27, height: 27, borderRadius: 14, background: '#fff', position: 'absolute', top: 2, left: halfDay ? 22 : 2, transition: 'left 0.3s' }} /></button>
+        </div>
+
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>NOTIZ</div>
+        <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional" style={{ width: '100%', padding: '12px 14px', background: 'var(--bg-input)', border: '1px solid var(--divider)', borderRadius: 10, color: 'var(--text)', fontSize: 15, outline: 'none', boxSizing: 'border-box' }} />
+
+        <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+          <button onClick={async () => { if (confirm('Abwesenheit löschen?')) { await db.vacations.delete(vac.id); onClose() } }} style={{ padding: '12px 16px', borderRadius: 10, border: 'none', background: 'var(--bg-input)', color: 'var(--red)', fontSize: 14, cursor: 'pointer' }}>🗑</button>
+          <button onClick={onClose} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text)', fontSize: 14, cursor: 'pointer' }}>Abbrechen</button>
+          <button onClick={async () => { await db.vacations.update(vac.id, { type, startDate, endDate, note, halfDay }); onClose() }} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: 'none', background: 'var(--green)', color: '#000', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Speichern</button>
+        </div>
+        <div style={{ height: 40 }} />
+      </div>
     </div>
   )
 }
