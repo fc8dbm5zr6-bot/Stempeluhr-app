@@ -23,17 +23,23 @@ Zeiterfassungs-App für iPhone und Web. Einfach Arbeitszeiten tracken, Überstun
 
 ### Als Web-App (empfohlen)
 
-1.https://stempeluhr-app.vercel.app im Browser öffnen
+1. [stempeluhr-app.vercel.app](https://stempeluhr-app.vercel.app) im Browser öffnen
 2. **iPhone:** Safari → Teilen → "Zum Home-Bildschirm"
 3. **Android:** Chrome → "Zum Startbildschirm hinzufügen"
+
+### Android APK
+
+1. [Neueste APK herunterladen](https://github.com/fc8dbm5zr6-bot/Stempeluhr-app/releases/latest)
+2. APK auf dem Gerät öffnen → "Installation aus unbekannten Quellen" erlauben
+3. Installieren — fertig
 
 ### Als native iOS-App
 
 Voraussetzung: Mac mit Xcode, iPhone per USB verbunden.
 
 ```bash
-git clone https://github.com/DEIN-USERNAME/stempeluhr.git
-cd stempeluhr
+git clone https://github.com/fc8dbm5zr6-bot/Stempeluhr-app.git
+cd Stempeluhr-app
 npm install
 npm run build
 npx cap sync ios
