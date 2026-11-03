@@ -113,9 +113,9 @@ export default function WeekView({ onSelectDay, initialDate }) {
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24,
-        background: totalDiff < 0 && totalWorked > 0 ? 'rgba(255, 59, 48, 0.08)' : 'transparent',
-        borderRadius: 12, padding: totalDiff < 0 && totalWorked > 0 ? '12px 16px' : 0,
-        margin: totalDiff < 0 && totalWorked > 0 ? '0 -16px 24px' : '0 0 24px',
+        background: totalDiff < 0 && totalWorked > 0 && weekDates[6] < new Date() ? 'rgba(255, 59, 48, 0.08)' : 'transparent',
+        borderRadius: 12, padding: totalDiff < 0 && totalWorked > 0 && weekDates[6] < new Date() ? '12px 16px' : 0,
+        margin: totalDiff < 0 && totalWorked > 0 && weekDates[6] < new Date() ? '0 -16px 24px' : '0 0 24px',
       }}>
         <PercentRing percent={totalPercent} size={56} strokeWidth={5} />
         <div style={{ flex: 1 }}>
