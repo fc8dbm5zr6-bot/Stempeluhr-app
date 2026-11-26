@@ -4,6 +4,7 @@ import { db } from '../db'
 import {
   formatDuration, formatTime, calculateDailyTarget, calculateWorkedMinutes,
   calculatePauseMinutes, getWeekdayNameDE, formatDateDE, isVacationDay, getVacationType,
+  getRequiredPause, MAX_WORK_MINUTES,
 } from '../utils/calculations'
 import EditEntryModal from './EditEntryModal'
 
@@ -165,6 +166,48 @@ export default function DayDetail({ date, onClose }) {
           />
           <Tile label="Pause" value={formatDuration(pauseMin)} />
         </div>
+
+        {/* Pause & Rest period info */}
+        {(settings?.mandatoryBreaksEnabled || settings?.restPeriodsEnabled) && workedMin > 0 && (() => {
+          let overrides = []
+          try { overrides = JSON.parse(localStorage.getItem('restPeriodOverrides') || '[]') } catch {}
+          const isOverridden = overrides.includes(date)
+          if (isOverridden) return (
+            <div style={{ background: 'var(--card)', borderRadius: 10, padding: '8px 14px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Pausen-/Ruhezeiten deaktiviert</span>
+              <button onClick={() => {
+                const nw = overrides.filter(d => d !== date)
+                try { localStorage.setItem('restPeriodOverrides', JSON.stringify(nw)) } catch {}
+                window.location.reload()
+              }} style={{ background: 'none', border: 'none', color: 'var(--blue)', fontSize: 12, cursor: 'pointer' }}>Aktivieren</button>
+            </div>
+          )
+          const req = getRequiredPause(workedMin)
+          const pauseDeficit = settings?.mandatoryBreaksEnabled && req > 0 && pauseMin < req ? Math.ceil(req - pauseMin) : 0
+          const overMax = settings?.restPeriodsEnabled && workedMin > MAX_WORK_MINUTES
+          if (!pauseDeficit && !overMax) return null
+          return (
+            <div style={{ background: 'rgba(255, 159, 10, 0.1)', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+              {pauseDeficit > 0 && (
+                <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 4 }}>
+                  ⏸ Pausenzeit aufgerundet: +{pauseDeficit}min (gesetzlich {req}min)
+                </div>
+              )}
+              {overMax && (
+                <div style={{ fontSize: 13, color: 'var(--red)', marginBottom: 4 }}>
+                  🛏 Max. Arbeitszeit 10h überschritten
+                </div>
+              )}
+              <button onClick={() => {
+                overrides.push(date)
+                try { localStorage.setItem('restPeriodOverrides', JSON.stringify(overrides)) } catch {}
+                window.location.reload()
+              }} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', padding: 0, marginTop: 4 }}>
+                Für diesen Tag deaktivieren
+              </button>
+            </div>
+          )
+        })()}
 
         {/* Timeline bar */}
         {timelineStart && (

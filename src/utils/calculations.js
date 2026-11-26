@@ -181,3 +181,12 @@ export function countAbsenceWorkDays(startDate, endDate, workDays, allVacations,
 export function todayStr() {
   return format(new Date(), 'yyyy-MM-dd')
 }
+
+export function getRequiredPause(workedMinutes) {
+  if (workedMinutes <= 360) return 0
+  if (workedMinutes <= 540) return 30
+  return 45
+}
+
+export const MAX_WORK_MINUTES = 600
+export const MIN_REST_HOURS = 11

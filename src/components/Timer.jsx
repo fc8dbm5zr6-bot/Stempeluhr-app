@@ -3,7 +3,7 @@ import { useTimer } from '../hooks/useTimer'
 import { useSettings } from '../hooks/useTimeEntries'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
-import { formatDuration, formatTime, calculateDailyTarget, calculateWorkedMinutes, calculatePauseMinutes, toDateStr, getVacationType, countAbsenceWorkDays } from '../utils/calculations'
+import { formatDuration, formatTime, calculateDailyTarget, calculateWorkedMinutes, calculatePauseMinutes, toDateStr, getVacationType, countAbsenceWorkDays, getRequiredPause, MAX_WORK_MINUTES, MIN_REST_HOURS } from '../utils/calculations'
 
 function pad(n) {
   return String(n).padStart(2, '0')
@@ -279,6 +279,40 @@ export default function Timer({ onShowDay, onShowVacations, onAddAbsence, onShow
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Pause</div>
         </div>
       </div>
+
+      {/* Rest period info */}
+      {(settings?.restPeriodsEnabled || settings?.mandatoryBreaksEnabled) && (todayEntries || []).length > 0 && (() => {
+        const lastEnd = [...(todayEntries || [])].filter(e => e.endTime).map(e => new Date(e.endTime).getTime()).sort().reverse()[0]
+        const restUntil = lastEnd ? new Date(lastEnd + MIN_REST_HOURS * 3600000) : null
+        const requiredPause = getRequiredPause(totalWorkedMin * 60)
+        const nearMax = totalWorkedMin > MAX_WORK_MINUTES - 60
+        const showRest = settings?.restPeriodsEnabled
+        const showBreaks = settings?.mandatoryBreaksEnabled
+        const hasContent = (showRest && restUntil && status === 'idle') || (showRest && nearMax && status === 'running') || (showBreaks && requiredPause > 0 && pauseMin < requiredPause)
+        if (!hasContent) return null
+        return (
+          <div style={{ background: 'var(--card)', borderRadius: 12, padding: '10px 14px', marginBottom: 12 }}>
+            {showRest && restUntil && status === 'idle' && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '2px 0' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>🛏 Ruhezeit bis</span>
+                <span style={{ color: 'var(--orange)' }}>{pad(restUntil.getHours())}:{pad(restUntil.getMinutes())} Uhr</span>
+              </div>
+            )}
+            {showRest && nearMax && status === 'running' && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '2px 0' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>🛏 Max. Arbeitszeit</span>
+                <span style={{ color: 'var(--red)' }}>10h erreicht!</span>
+              </div>
+            )}
+            {showBreaks && requiredPause > 0 && pauseMin < requiredPause && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '2px 0' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>⏸ Mindestpause</span>
+                <span style={{ color: 'var(--orange)' }}>{requiredPause}min (noch {Math.ceil(requiredPause - pauseMin)}min)</span>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>

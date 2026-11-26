@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useSettings, useWeekEntries, useVacations } from '../hooks/useTimeEntries'
 import {
   getWeekNumber, formatDuration, calculateDailyTarget, getDayEntries,
-  calculateWorkedMinutes, calculateRawWorkedMinutes, getWeekDates, formatDateDE, getWeekdayNameDE, isVacationDay, getVacationType, toDateStr,
+  calculateWorkedMinutes, calculateRawWorkedMinutes, calculatePauseMinutes, getWeekDates, formatDateDE, getWeekdayNameDE, isVacationDay, getVacationType, toDateStr, MIN_REST_HOURS,
 } from '../utils/calculations'
 
 function PercentRing({ percent, size = 44, strokeWidth = 4, color }) {
@@ -74,7 +74,10 @@ export default function WeekView({ onSelectDay, initialDate }) {
     const percent = isVac ? 100 : (dailyTarget > 0 ? Math.round((workedWithMultiplier / dailyTarget) * 100) : (workedWithMultiplier > 0 ? 100 : 0))
     const isPast = date < new Date(new Date().setHours(0, 0, 0, 0))
     const isMissing = !isTransitioning && isWork && isPast && !isVac && rawWorked === 0 && dayEntries.length === 0
-    return { date, dateStr, worked: workedWithMultiplier, rawWorked, target, diff, percent, isWork, isVac, vacType, isHalf, dayOfWeek, isMissing }
+    const pauseMin = calculatePauseMinutes(dayEntries)
+    const lastEnd = dayEntries.filter(e => e.endTime).map(e => new Date(e.endTime).getTime()).sort().reverse()[0] || null
+    const firstStart = dayEntries.filter(e => e.startTime).map(e => new Date(e.startTime).getTime()).sort()[0] || null
+    return { date, dateStr, worked: workedWithMultiplier, rawWorked, target, diff, percent, isWork, isVac, vacType, isHalf, dayOfWeek, isMissing, pauseMin, lastEnd, firstStart }
   })
 
   const totalWorked = days.reduce((s, d) => s + (d.isVac ? 0 : d.worked), 0)
@@ -180,6 +183,25 @@ export default function WeekView({ onSelectDay, initialDate }) {
                   {day.diff >= 0 ? '+' : ''}{formatDuration(Math.abs(day.diff))}
                 </div>
               )}
+              {day.pauseMin > 0 && (settings?.mandatoryBreaksEnabled || settings?.restPeriodsEnabled) && (
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                  ☕ {formatDuration(day.pauseMin)}
+                </div>
+              )}
+              {(() => {
+                if (!settings?.restPeriodsEnabled) return null
+                const idx = days.indexOf(day)
+                if (idx > 0) {
+                  const prev = days[idx - 1]
+                  if (prev.lastEnd && day.firstStart) {
+                    const restH = (day.firstStart - prev.lastEnd) / 3600000
+                    if (restH > 0 && restH < MIN_REST_HOURS) return (
+                      <div style={{ fontSize: 11, color: 'var(--orange)' }}>⚠ Ruhezeit {restH.toFixed(1)}h</div>
+                    )
+                  }
+                }
+                return null
+              })()}
             </div>
           </button>
           )

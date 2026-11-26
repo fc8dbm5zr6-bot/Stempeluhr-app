@@ -54,7 +54,7 @@ export default function App() {
       case 'woche':
         return <WeekView key={tabResetKey} onSelectDay={(d) => setSelectedDate(d)} initialDate={initialWeekDate} />
       case 'monat':
-        return <MonthView key={tabResetKey} onSelectWeek={(weekNum, monday) => {
+        return <MonthView key={tabResetKey} onAddAbsence={() => setShowQuickAbsence(true)} onSelectWeek={(weekNum, monday) => {
           setInitialWeekDate(monday)
           setTabResetKey(k => k + 1)
           setActiveTab('woche')

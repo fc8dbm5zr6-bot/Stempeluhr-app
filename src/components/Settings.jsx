@@ -7,6 +7,7 @@ import VacationManager from './VacationManager'
 import OvertimeAccount from './OvertimeAccount'
 import YearSummary from './YearSummary'
 import { getFeiertage, getBundeslaender } from '../utils/feiertage'
+import { toDateStr } from '../utils/calculations'
 
 const DAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 const DAY_VALUES = [1, 2, 3, 4, 5, 6, 7]
@@ -114,7 +115,34 @@ export default function Settings() {
           <label style={{ ...labelStyle, marginTop: 16 }}>Bundesland (Feiertage)</label>
           <select
             value={settings.bundesland || 'NW'}
-            onChange={e => updateSetting('bundesland', e.target.value)}
+            onChange={async e => {
+              const newBl = e.target.value
+              const oldBl = settings.bundesland || 'NW'
+              if (newBl === oldBl) return
+              const choice = prompt('Feiertage ändern?\n1 = Rückwirkend (alle ersetzen)\n2 = Nur Zukunft\n3 = Abbrechen')
+              if (choice === '3' || !choice) return
+              await updateSetting('bundesland', newBl)
+              const today = toDateStr(new Date())
+              const existing = await db.vacations.where('type').equals('Feiertag').toArray()
+              if (choice === '1') {
+                for (const v of existing) await db.vacations.delete(v.id)
+              } else {
+                for (const v of existing) { if (v.startDate >= today) await db.vacations.delete(v.id) }
+              }
+              const thisYear = new Date().getFullYear()
+              const years = [thisYear, thisYear + 1, thisYear + 2]
+              const remaining = await db.vacations.where('type').equals('Feiertag').toArray()
+              for (const y of years) {
+                const feiertage = getFeiertage(y, newBl)
+                for (const ft of feiertage) {
+                  if (choice === '2' && ft.date < today) continue
+                  const exists = remaining.some(v => v.startDate === ft.date && v.endDate === ft.date)
+                  if (!exists) await db.vacations.add({ startDate: ft.date, endDate: ft.date, type: 'Feiertag', note: ft.name, halfDay: ft.halfDay || false })
+                }
+              }
+              try { localStorage.setItem('lastFeiertagSync', 'force') } catch {}
+              alert('Feiertage aktualisiert')
+            }}
             style={inputStyle}
           >
             {getBundeslaender().map(bl => (
@@ -316,6 +344,40 @@ export default function Settings() {
           <span>📊 Jahresübersicht</span>
           <span style={{ color: 'var(--text-secondary)' }}>›</span>
         </button>
+        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16, marginRight: 16 }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px' }}>
+          <div>
+            <div style={{ fontSize: 15 }}>⏸ Gesetzliche Pausenzeiten</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Pausen auf Minimum aufrunden</div>
+          </div>
+          <button onClick={() => updateSetting('mandatoryBreaksEnabled', !settings.mandatoryBreaksEnabled)} style={{
+            width: 51, height: 31, borderRadius: 16, border: 'none',
+            background: settings.mandatoryBreaksEnabled ? 'var(--purple)' : 'var(--text-muted)',
+            position: 'relative', cursor: 'pointer', transition: 'background 0.3s', flexShrink: 0,
+          }}>
+            <div style={{
+              width: 27, height: 27, borderRadius: 14, background: '#fff',
+              position: 'absolute', top: 2, left: settings.mandatoryBreaksEnabled ? 22 : 2, transition: 'left 0.3s',
+            }} />
+          </button>
+        </div>
+        <div style={{ borderBottom: '1px solid var(--divider)', marginLeft: 16, marginRight: 16 }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px' }}>
+          <div>
+            <div style={{ fontSize: 15 }}>🛏 Gesetzliche Ruhezeiten</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>11h Ruhezeit, max. 10h Arbeit</div>
+          </div>
+          <button onClick={() => updateSetting('restPeriodsEnabled', !settings.restPeriodsEnabled)} style={{
+            width: 51, height: 31, borderRadius: 16, border: 'none',
+            background: settings.restPeriodsEnabled ? 'var(--purple)' : 'var(--text-muted)',
+            position: 'relative', cursor: 'pointer', transition: 'background 0.3s', flexShrink: 0,
+          }}>
+            <div style={{
+              width: 27, height: 27, borderRadius: 14, background: '#fff',
+              position: 'absolute', top: 2, left: settings.restPeriodsEnabled ? 22 : 2, transition: 'left 0.3s',
+            }} />
+          </button>
+        </div>
       </div>
 
       {/* Danger zone */}
@@ -348,7 +410,7 @@ export default function Settings() {
       {/* Über */}
       <div style={{ textAlign: 'center', padding: '24px 0 16px', color: 'var(--text-secondary)', fontSize: 13 }}>
         <div style={{ fontWeight: 600 }}>Stempeluhr</div>
-        <div>Version 1.3.1</div>
+        <div>Version 1.4.0</div>
       </div>
     </div>
   )

@@ -39,7 +39,9 @@ export default function VacationManager({ onClose }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }} onTouchStart={e => { vSwipe.current = e.touches[0].clientX }} onTouchEnd={e => {
-      if (vSwipe.current !== null && e.changedTouches[0].clientX - vSwipe.current > 100) onClose()
+      if (vSwipe.current === null) return
+      const diff = e.changedTouches[0].clientX - vSwipe.current
+      if (Math.abs(diff) > 60) setYear(y => diff > 0 ? y - 1 : y + 1)
       vSwipe.current = null
     }}>
     <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 16px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)' }}>
@@ -199,6 +201,19 @@ export default function VacationManager({ onClose }) {
           halfDaysGifted={settings?.halfDaysGifted || false}
           existingVacations={vacations}
           onSave={async (data) => {
+            const overlapping = (vacations || []).filter(v =>
+              v.type === data.type && v.id !== editVac?.id &&
+              v.startDate <= data.endDate && v.endDate >= data.startDate
+            )
+            if (overlapping.length > 0) {
+              if (confirm('Überschneidende Abwesenheiten gefunden. Sollen die Einträge zusammengeführt werden?')) {
+                const allStarts = [data.startDate, ...overlapping.map(v => v.startDate)]
+                const allEnds = [data.endDate, ...overlapping.map(v => v.endDate)]
+                data.startDate = allStarts.sort()[0]
+                data.endDate = allEnds.sort().reverse()[0]
+                for (const ov of overlapping) await db.vacations.delete(ov.id)
+              }
+            }
             if (editVac) {
               await db.vacations.update(editVac.id, data)
             } else {

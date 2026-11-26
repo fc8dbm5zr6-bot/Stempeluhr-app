@@ -22,6 +22,8 @@ export async function initDefaults() {
       vacationOverrides: {},
       bundesland: 'NW',
       multipliers: [1, 1.25, 1.5, 2],
+      restPeriodsEnabled: false,
+      mandatoryBreaksEnabled: false,
     })
   } else {
     const s = await db.settings.toCollection().first()

@@ -14,7 +14,7 @@ const MONTH_NAMES = [
 
 const MAX_HOURS = 70
 
-export default function MonthView({ onSelectWeek }) {
+export default function MonthView({ onSelectWeek, onAddAbsence }) {
   const [monthOffset, setMonthOffset] = useState(0)
   const [editVac, setEditVac] = useState(null)
   const settings = useSettings()
@@ -246,10 +246,18 @@ export default function MonthView({ onSelectWeek }) {
             return (
               <button
                 key={i}
-                onClick={() => { if (!isFeiertag) setEditVac(v) }}
+                onClick={() => {
+                  if (isFeiertag) {
+                    if (confirm(`Feiertag "${v.note || v.type}" löschen?`)) {
+                      db.vacations.delete(v.id)
+                    }
+                  } else {
+                    setEditVac(v)
+                  }
+                }}
                 style={{
                   width: '100%', background: 'var(--card)', borderRadius: 12, padding: 14, marginBottom: 8,
-                  border: 'none', cursor: isFeiertag ? 'default' : 'pointer',
+                  border: 'none', cursor: 'pointer',
                   color: 'var(--text)', textAlign: 'left',
                   opacity: isFeiertag ? 0.5 : 1,
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -262,12 +270,20 @@ export default function MonthView({ onSelectWeek }) {
                     {v.startDate !== v.endDate && ` – ${new Date(v.endDate + 'T12:00:00').toLocaleDateString('de-DE')}`}
                   </div>
                 </div>
-                {!isFeiertag && (
+                {isFeiertag ? (
+                  <span style={{ fontSize: 14, color: 'var(--red)' }}>✕</span>
+                ) : (
                   <span style={{ fontSize: 16, color: 'var(--text-secondary)' }}>✎</span>
                 )}
               </button>
             )
           })}
+          {onAddAbsence && (
+            <button onClick={onAddAbsence} style={{
+              width: '100%', padding: '12px 0', borderRadius: 10, border: '1px dashed var(--divider)',
+              background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer', marginTop: 8,
+            }}>+ Abwesenheit eintragen</button>
+          )}
         </div>
       )}
       </div>{/* end slide wrapper */}
@@ -386,7 +402,23 @@ function EditVacModal({ vac, onClose, workDays, allVacations }) {
         <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
           <button onClick={async () => { if (confirm('Abwesenheit löschen?')) { await db.vacations.delete(vac.id); onClose() } }} style={{ padding: '12px 16px', borderRadius: 10, border: 'none', background: 'var(--bg-input)', color: 'var(--red)', fontSize: 14, cursor: 'pointer' }}>🗑</button>
           <button onClick={onClose} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text)', fontSize: 14, cursor: 'pointer' }}>Abbrechen</button>
-          <button onClick={async () => { await db.vacations.update(vac.id, { type, startDate, endDate, note, halfDay }); onClose() }} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: 'none', background: 'var(--green)', color: '#000', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Speichern</button>
+          <button onClick={async () => {
+            const data = { type, startDate, endDate, note, halfDay }
+            const overlapping = allVacations.filter(v =>
+              v.type === type && v.id !== vac.id &&
+              v.startDate <= endDate && v.endDate >= startDate
+            )
+            if (overlapping.length > 0) {
+              if (confirm('Überschneidende Abwesenheiten gefunden. Zusammenführen?')) {
+                const allS = [startDate, ...overlapping.map(v => v.startDate)]
+                const allE = [endDate, ...overlapping.map(v => v.endDate)]
+                data.startDate = allS.sort()[0]
+                data.endDate = allE.sort().reverse()[0]
+                for (const ov of overlapping) await db.vacations.delete(ov.id)
+              }
+            }
+            await db.vacations.update(vac.id, data); onClose()
+          }} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: 'none', background: 'var(--green)', color: '#000', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Speichern</button>
         </div>
         <div style={{ height: 40 }} />
       </div>

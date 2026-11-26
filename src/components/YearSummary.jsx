@@ -98,8 +98,7 @@ export default function YearSummary({ onClose }) {
       onTouchEnd={e => {
         if (touchStart.current === null) return
         const diff = e.changedTouches[0].clientX - touchStart.current
-        if (diff > 100) onClose()
-        else if (Math.abs(diff) > 60) setYear(y => diff > 0 ? y - 1 : y + 1)
+        if (Math.abs(diff) > 60) setYear(y => diff > 0 ? y - 1 : y + 1)
         touchStart.current = null
       }}
     >
